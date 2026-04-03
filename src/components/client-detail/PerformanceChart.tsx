@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card } from "@/components/ui/Card";
-import { formatMonthLabel, formatCurrency } from "@/lib/formatters";
+import { formatCurrency } from "@/lib/formatters";
 import type { PowershiftMonthlyRow } from "@/types";
 
 interface PerformanceChartProps {
@@ -24,7 +24,6 @@ interface ChartPoint {
   spend: number;
 }
 
-// Custom tooltip styled to match the TDN design system
 function CustomTooltip({
   active,
   payload,
@@ -68,8 +67,9 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
     );
   }
 
+  // Use month_label directly from the view — already formatted
   const chartData: ChartPoint[] = data.map((row) => ({
-    month: formatMonthLabel(row.month),
+    month: row.month_label,
     enquiries: row.enquiries,
     spend: row.spend,
   }));
@@ -79,7 +79,7 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-sand/40">
         <div>
           <h3 className="font-heading text-sm font-semibold text-teal tracking-wide">
-            Enquiries & spend over time
+            Enquiries &amp; spend over time
           </h3>
           <p className="text-2xs text-teal/35 mt-0.5">
             Monthly trend — last {data.length} months
@@ -105,7 +105,6 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
               tickLine={false}
               dy={6}
             />
-            {/* Left axis — enquiries */}
             <YAxis
               yAxisId="enquiries"
               orientation="left"
@@ -114,7 +113,6 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
               tickLine={false}
               width={28}
             />
-            {/* Right axis — spend in $ */}
             <YAxis
               yAxisId="spend"
               orientation="right"
