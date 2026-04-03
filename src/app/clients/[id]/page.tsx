@@ -113,8 +113,8 @@ export default function ClientDetailPage() {
         },
         {
           label: "Website conv. rate",
-          value: formatPercentAbsolute(latest.website_conversion_rate),
-          delta: latest.mom_wcr_pct,
+          value: formatPercentAbsolute(latest.website_conversion_rate_pct),
+          delta: latest.mom_website_conversion_rate_pct,
         },
       ]
     : client.summaryMetrics.map((m: SummaryMetric) => ({
