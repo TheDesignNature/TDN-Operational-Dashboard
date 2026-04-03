@@ -32,17 +32,18 @@ export interface SummaryMetric {
 
 /** Matches the shape of the powershift_monthly_report Supabase view */
 export interface PowershiftMonthlyRow {
-  month: string;           // e.g. "2024-10"
+  metric_date: string;                      // e.g. "2024-10-01"
+  month_label: string;                      // e.g. "Oct 2024"
   spend: number;
   traffic: number;
   enquiries: number;
   cost_per_lead: number;
-  website_conversion_rate: number;
+  website_conversion_rate_pct: number;      // was: website_conversion_rate
   mom_spend_pct: number | null;
   mom_traffic_pct: number | null;
   mom_enquiries_pct: number | null;
   mom_cpl_pct: number | null;
-  mom_wcr_pct: number | null;
+  mom_website_conversion_rate_pct: number | null;  // was: mom_wcr_pct
 }
 
 // ── Tasks ─────────────────────────────────────────────────────
