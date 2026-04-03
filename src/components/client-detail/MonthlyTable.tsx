@@ -2,7 +2,6 @@ import { Card } from "@/components/ui/Card";
 import { NoDataEmpty } from "@/components/ui/EmptyState";
 import {
   formatCurrency,
-  formatMonthLabel,
   formatNumber,
   formatDelta,
   formatPercentAbsolute,
@@ -46,8 +45,10 @@ export function MonthlyTable({ data }: MonthlyTableProps) {
     );
   }
 
-  // Show most recent months first
-  const sorted = [...data].sort((a, b) => b.month.localeCompare(a.month));
+  // Most recent first
+  const sorted = [...data].sort((a, b) =>
+    b.metric_date.localeCompare(a.metric_date)
+  );
 
   return (
     <Card padding="none" className="mb-6 overflow-hidden">
@@ -81,9 +82,9 @@ export function MonthlyTable({ data }: MonthlyTableProps) {
           </thead>
           <tbody>
             {sorted.map((row, i) => (
-              <tr key={row.month} className={i === 0 ? "bg-teal/5 font-medium" : ""}>
+              <tr key={row.metric_date} className={i === 0 ? "bg-teal/5 font-medium" : ""}>
                 <td className="sticky left-0 bg-white z-10 font-medium text-teal/80">
-                  {formatMonthLabel(row.month)}
+                  {row.month_label}
                   {i === 0 && (
                     <span className="ml-2 text-2xs bg-teal text-white px-1.5 py-0.5 rounded font-medium">
                       Latest
@@ -94,14 +95,12 @@ export function MonthlyTable({ data }: MonthlyTableProps) {
                 <td>{formatNumber(row.traffic)}</td>
                 <td>{formatNumber(row.enquiries)}</td>
                 <td>{formatCurrency(row.cost_per_lead)}</td>
-                <td>{formatPercentAbsolute(row.website_conversion_rate)}</td>
+                <td>{formatPercentAbsolute(row.website_conversion_rate_pct)}</td>
                 <td><DeltaCell value={row.mom_spend_pct} /></td>
                 <td><DeltaCell value={row.mom_traffic_pct} /></td>
                 <td><DeltaCell value={row.mom_enquiries_pct} /></td>
-                {/* CPL: lower is better */}
                 <td><DeltaCell value={row.mom_cpl_pct} invertGood /></td>
-                {/* WCR: higher is better */}
-                <td><DeltaCell value={row.mom_wcr_pct} /></td>
+                <td><DeltaCell value={row.mom_website_conversion_rate_pct} /></td>
               </tr>
             ))}
           </tbody>
