@@ -17,7 +17,7 @@ export async function getPowershiftMonthlyReport(): Promise<PowershiftMonthlyRow
   const { data, error } = await supabase
     .from("powershift_monthly_report")
     .select("*")
-    .order("metric_date", { ascending: true });
+    .order("metric_date", { ascending: true }); // cache bust
 
   if (error) {
     throw new Error(`Failed to load Powershift report: ${error.message}`);
