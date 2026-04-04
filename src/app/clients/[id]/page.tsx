@@ -178,3 +178,4 @@ export default function ClientDetailPage() {
     </div>
   );
 }
+import { getPowershiftMonthlyReport, getPowershiftMTD, type PowershiftMTD } from "@/services/powershiftService";
