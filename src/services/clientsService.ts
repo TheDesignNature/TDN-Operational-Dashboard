@@ -16,7 +16,7 @@ const MOCK_CLIENTS: Client[] = [
   {
     id: "powershift",
     name: "Powershift",
-    industry: "Air Conditioning",
+    industry: "Technologies",
     status: "action",
     statusMessage: "Enquiries dropped 28% MoM — conversion rate investigation needed",
     lastUpdated: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
