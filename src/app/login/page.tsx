@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +40,51 @@ export default function LoginPage() {
   }
 
   return (
+    <div className="bg-white rounded-card shadow-card border border-sand/40 p-6">
+      <p className="text-sm text-teal/60 mb-5 text-center">
+        Enter your password to continue
+      </p>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label
+            htmlFor="password"
+            className="block text-xs font-medium text-teal/50 mb-1.5"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter password"
+            autoFocus
+            required
+            className="input-base"
+          />
+        </div>
+
+        {error && (
+          <p className="text-xs text-status-action bg-status-action-bg border border-status-action-border rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading || !password}
+          className="btn-primary w-full justify-center"
+        >
+          {loading ? "Checking..." : "Sign in"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
     <div className="min-h-screen bg-stone flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
 
@@ -58,47 +103,14 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Login card */}
-        <div className="bg-white rounded-card shadow-card border border-sand/40 p-6">
-          <p className="text-sm text-teal/60 mb-5 text-center">
-            Enter your password to continue
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-xs font-medium text-teal/50 mb-1.5"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                autoFocus
-                required
-                className="input-base"
-              />
-            </div>
-
-            {error && (
-              <p className="text-xs text-status-action bg-status-action-bg border border-status-action-border rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !password}
-              className="btn-primary w-full justify-center"
-            >
-              {loading ? "Checking..." : "Sign in"}
-            </button>
-          </form>
-        </div>
+        {/* Suspense required for useSearchParams() in Next.js 15 */}
+        <Suspense fallback={
+          <div className="bg-white rounded-card shadow-card border border-sand/40 p-6">
+            <p className="text-sm text-teal/40 text-center">Loading...</p>
+          </div>
+        }>
+          <LoginForm />
+        </Suspense>
 
         <p className="text-center text-2xs text-teal/25 mt-6">
           The Design Nature · Internal use only
