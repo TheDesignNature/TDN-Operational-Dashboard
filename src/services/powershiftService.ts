@@ -46,3 +46,34 @@ export async function getLatestPowershiftMonth(): Promise<PowershiftMonthlyRow |
 
   return data as PowershiftMonthlyRow;
 }
+export interface PowershiftMTD {
+  month_label: string;
+  spend_mtd: number;
+  traffic_mtd: number;
+  impressions_mtd: number;
+  clicks_mtd: number;
+  conversions_mtd: number;
+  enquiries_mtd: number;
+  cpc_mtd: number;
+  ctr_mtd: number | null;
+  cost_per_enquiry_mtd: number | null;
+  conversion_rate_mtd: number;
+  days_tracked: number;
+  last_updated: string;
+}
+
+export async function getPowershiftMTD(): Promise<PowershiftMTD | null> {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("powershift_mtd")
+    .select("*")
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    throw new Error(`Failed to load Powershift MTD: ${error.message}`);
+  }
+
+  return data as PowershiftMTD;
+}
