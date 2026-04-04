@@ -12,6 +12,15 @@ export function formatCurrency(value: number): string {
   if (value >= 10_000) {
     return `$${Math.round(value / 1_000)}k`;
   }
+  // Show cents for small values like CPC
+  if (value < 10) {
+    return new Intl.NumberFormat("en-AU", {
+      style: "currency",
+      currency: "AUD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
     currency: "AUD",
