@@ -179,3 +179,4 @@ export default function ClientDetailPage() {
   );
 }
 import { getPowershiftMonthlyReport, getPowershiftMTD, type PowershiftMTD } from "@/services/powershiftService";
+const [mtd, setMtd] = useState<PowershiftMTD | null>(null);
