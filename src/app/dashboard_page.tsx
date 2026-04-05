@@ -268,7 +268,12 @@ export default function DashboardPage() {
 
       const psClient = buildClient("powershift", "Powershift", "powershift", ps);
       // Check if Powershift has live MTD data
-      const { data: mtdData } = await supabase.from("powershift_mtd").select("spend_mtd,traffic_mtd,enquiries_mtd").single().throwOnError().catch(() => ({ data: null }));
+      let mtdData = null;
+      try {
+        const { data } = await supabase.from("powershift_mtd").select("spend_mtd,traffic_mtd,enquiries_mtd").single();
+        mtdData = data;
+      } catch {}
+
       if (mtdData?.spend_mtd) {
         psClient.isLive = true;
         psClient.mtd_spend = mtdData.spend_mtd;
