@@ -116,7 +116,7 @@ export function TaskItem({
             {/* Meta badges */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {task.source && task.source !== "manual" && (
-                <Badge variant={task.source === "ai" ? "ai" : "default"}>
+                <Badge variant={task.source === "ai" ? "ai" : "neutral"}>
                   {task.source === "ai" ? "AI" :
                    task.source === "openclaw" ? "OpenClaw" :
                    task.source === "outlook" ? "Outlook" :
