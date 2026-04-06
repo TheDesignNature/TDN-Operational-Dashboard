@@ -50,7 +50,7 @@ export interface PowershiftMonthlyRow {
 
 export type TaskPriority = "high" | "medium" | "low";
 export type TaskStatus = "todo" | "in_progress" | "done";
-export type TaskSource = "manual" | "ai";
+export type TaskSource = "manual" | "ai" | "openclaw" | "outlook" | "sms" | "slack";
 export type TaskBucket = "today" | "week" | "backlog";
 
 export interface Task {
