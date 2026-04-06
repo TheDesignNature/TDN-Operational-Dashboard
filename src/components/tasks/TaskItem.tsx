@@ -115,8 +115,15 @@ export function TaskItem({
 
             {/* Meta badges */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              {task.source === "ai" && (
-                <Badge variant="ai">AI</Badge>
+              {task.source && task.source !== "manual" && (
+                <Badge variant={task.source === "ai" ? "ai" : "default"}>
+                  {task.source === "ai" ? "AI" :
+                   task.source === "openclaw" ? "OpenClaw" :
+                   task.source === "outlook" ? "Outlook" :
+                   task.source === "sms" ? "SMS" :
+                   task.source === "slack" ? "Slack" :
+                   task.source}
+                </Badge>
               )}
               <Badge variant={task.priority as "high" | "medium" | "low"}>
                 {priority.label}
