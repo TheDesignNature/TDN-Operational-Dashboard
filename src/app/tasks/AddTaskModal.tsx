@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from "react";
 import { addTask } from "@/services/tasksService";
 import { cn } from "@/lib/cn";
-import type { Task, TaskPriority, TaskStatus } from "@/types";
+import type { Task, TaskPriority, TaskStatus, TaskSource } from "@/types";
 
 const CLIENTS = [
   { id: "powershift", name: "Powershift" },
@@ -34,7 +34,7 @@ export function AddTaskModal({ onClose, onCreated, defaultClientId }: AddTaskMod
   const [clientId, setClientId] = useState(defaultClientId ?? "");
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);
-  const [source, setSource] = useState("manual");
+  const [source, setSource] = useState<TaskSource>("manual");
   const [notes, setNotes] = useState("");
   const [estimatedMinutes, setEstimatedMinutes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -149,7 +149,7 @@ export function AddTaskModal({ onClose, onCreated, defaultClientId }: AddTaskMod
             </div>
             <div>
               <label className="block text-xs font-medium text-teal/60 mb-1.5">Source</label>
-              <select value={source} onChange={(e: ChangeEvent<HTMLSelectElement>) => setSource(e.target.value)} className="input-base">
+              <select value={source} onChange={(e: ChangeEvent<HTMLSelectElement>) => setSource(e.target.value as TaskSource)} className="input-base">
                 {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
