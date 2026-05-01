@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { ClientHeader } from "@/components/client-detail/ClientHeader";
 import { InsightsList } from "@/components/client-detail/InsightsList";
+import { DrillDownTable } from "@/components/client-detail/DrillDownTable";
 import { PageLoader } from "@/components/ui/LoadingSpinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { getClientById } from "@/services/clientsService";
@@ -100,7 +101,7 @@ const CHART_BLUE = "#A1B4B7";
 
 function EnquiriesChart({ data, label }: { data: MonthlyReportRow[]; label: string }) {
   const last13 = data.slice(-13);
-  const chartData = last13.map((row, i) => {
+  const chartData = last13.map((row) => {
     const allIdx = data.indexOf(row);
     const yoyRow = allIdx >= 12 ? data[allIdx - 12] : null;
     const enq = row.enquiries ?? row.bookings ?? 0;
@@ -137,7 +138,7 @@ function EnquiriesChart({ data, label }: { data: MonthlyReportRow[]; label: stri
 
 // ── CPL 13-month chart ────────────────────────────────────────
 
-function CPLChart({ data, label }: { data: MonthlyReportRow[]; label: string; isBooking: boolean }) {
+function CPLChart({ data, label, isBooking }: { data: MonthlyReportRow[]; label: string; isBooking: boolean }) {
   const last13 = data.slice(-13).map((row) => ({
     month: row.month_label.split(" ")[0],
     cpl: row.cost_per_lead ?? row.cost_per_booking,
@@ -171,13 +172,13 @@ function SpendByChannelChart({ clientId }: { clientId: string }) {
     async function load() {
       const { getSupabaseClient } = await import("@/lib/supabase");
       const clientUUIDs: Record<string, string> = {
-        "powershift": "b2d53ecf-f700-42e4-93e9-8cea66fcede6",
-        "kkcs": "b04e39ae-ef5f-43dc-aeed-76959567f63a",
-        "foundation-home": "126e2bbc-95db-45da-a401-c986658f76e4",
-        "study-hub": "1c65ba78-c4bb-430d-94d0-729e16706bdf",
-        "caloundra-city-auto": "2144357d-8438-4d24-9fe7-c1d46cdf37b4",
-        "caloundra-mazda": "08bcfac7-1032-4279-9bc0-2566c9284fc5",
-        "sell-a-car": "af3cdca0-6866-427c-bfc5-0241d7fe9905",
+        "powershift":           "b2d53ecf-f700-42e4-93e9-8cea66fcede6",
+        "kkcs":                 "b04e39ae-ef5f-43dc-aeed-76959567f63a",
+        "foundation-home":      "126e2bbc-95db-45da-a401-c986658f76e4",
+        "study-hub":            "1c65ba78-c4bb-430d-94d0-729e16706bdf",
+        "caloundra-city-auto":  "2144357d-8438-4d24-9fe7-c1d46cdf37b4",
+        "caloundra-mazda":      "08bcfac7-1032-4279-9bc0-2566c9284fc5",
+        "sell-a-car":           "af3cdca0-6866-427c-bfc5-0241d7fe9905",
       };
       const uuid = clientUUIDs[clientId];
       if (!uuid) return;
@@ -426,6 +427,8 @@ export default function ClientDetailPage() {
                 enquiryLabel={enquiryLabel}
                 cplLabel={cplLabel}
               />
+              <SectionDivider />
+              <DrillDownTable clientId={clientId} />
             </>
           )}
 
