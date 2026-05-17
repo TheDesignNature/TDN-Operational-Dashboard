@@ -221,6 +221,31 @@ async function upsertRows({
   };
 }
 
+function addAdgroupRowKey(rows: any[]) {
+  return rows.map((row) => ({
+    ...row,
+    row_key: [
+      row.date,
+      row.account_id,
+      row.campaign_id,
+      row.ad_group_id || "NO_AD_GROUP",
+    ].join("|"),
+  }));
+}
+
+function addSearchTermRowKey(rows: any[]) {
+  return rows.map((row) => ({
+    ...row,
+    row_key: [
+      row.date,
+      row.account_id,
+      row.campaign_id,
+      row.ad_group_id || "NO_AD_GROUP",
+      row.search_term || "NO_SEARCH_TERM",
+    ].join("|"),
+  }));
+}
+
 export async function GET(req: NextRequest) {
   try {
     const cronSecret = process.env["CRON_SECRET"];
@@ -265,7 +290,7 @@ export async function GET(req: NextRequest) {
       })
     );
 
-    const adgroupRows = await fetchWindsorData({
+    const adgroupRowsRaw = await fetchWindsorData({
       connector: "google_ads",
       accounts: GOOGLE_ADS_ACCOUNTS,
       fields: GOOGLE_ADS_ADGROUP_FIELDS,
@@ -273,15 +298,17 @@ export async function GET(req: NextRequest) {
       dateTo: date,
     });
 
+    const adgroupRows = addAdgroupRowKey(adgroupRowsRaw);
+
     results.push(
       await upsertRows({
         table: "windsor_google_ads_adgroup_daily",
         rows: adgroupRows,
-        onConflict: "date,account_id,campaign_id,ad_group_id",
+        onConflict: "row_key",
       })
     );
 
-    const searchTermRows = await fetchWindsorData({
+    const searchTermRowsRaw = await fetchWindsorData({
       connector: "google_ads",
       accounts: GOOGLE_ADS_ACCOUNTS,
       fields: GOOGLE_ADS_SEARCH_TERM_FIELDS,
@@ -289,11 +316,13 @@ export async function GET(req: NextRequest) {
       dateTo: date,
     });
 
+    const searchTermRows = addSearchTermRowKey(searchTermRowsRaw);
+
     results.push(
       await upsertRows({
         table: "windsor_google_ads_search_terms_daily",
         rows: searchTermRows,
-        onConflict: "date,account_id,campaign_id,ad_group_id,search_term",
+        onConflict: "row_key",
       })
     );
 
