@@ -1,4 +1,4 @@
-  import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { getSupabaseClient } from "@/lib/supabase";
 
@@ -45,6 +45,7 @@ const GOOGLE_ADS_CAMPAIGN_FIELDS = [
 function getYesterdayBrisbaneDate(): string {
   const now = new Date();
 
+  // Brisbane UTC+10
   const brisbaneNow = new Date(
     now.getTime() + 10 * 60 * 60 * 1000
   );
@@ -77,14 +78,22 @@ async function fetchWindsorData({
 
   const params = new URLSearchParams();
 
+  // Windsor auth
   params.set("api_key", apiKey);
-  params.set("connector", connector);
+
+  // Query params
   params.set("accounts", accounts.join(","));
   params.set("fields", fields.join(","));
   params.set("date_from", dateFrom);
   params.set("date_to", dateTo);
 
-const url = `https://connectors.windsor.ai/${connector}?${params.toString()}`;
+  // Connector-specific endpoint
+  const url = `https://connectors.windsor.ai/${connector}?${params.toString()}`;
+
+  console.log("WINDSOR URL:");
+  console.log(
+    url.replace(apiKey, "***HIDDEN***")
+  );
 
   const response = await fetch(url, {
     method: "GET",
@@ -94,19 +103,47 @@ const url = `https://connectors.windsor.ai/${connector}?${params.toString()}`;
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    const text = await response.text();
+  const text = await response.text();
 
+  console.log("WINDSOR STATUS:", response.status);
+  console.log("WINDSOR RESPONSE:");
+  console.log(text);
+
+  if (!response.ok) {
     throw new Error(
       `Windsor API failed (${response.status}): ${text}`
     );
   }
 
-  const json = await response.json();
+  let json: unknown;
 
-  if (Array.isArray(json)) return json;
-  if (Array.isArray(json.result)) return json.result;
-  if (Array.isArray(json.data)) return json.data;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("Windsor returned invalid JSON");
+  }
+
+  if (Array.isArray(json)) {
+    return json;
+  }
+
+  if (
+    typeof json === "object" &&
+    json !== null &&
+    "result" in json &&
+    Array.isArray((json as any).result)
+  ) {
+    return (json as any).result;
+  }
+
+  if (
+    typeof json === "object" &&
+    json !== null &&
+    "data" in json &&
+    Array.isArray((json as any).data)
+  ) {
+    return (json as any).data;
+  }
 
   throw new Error("Unexpected Windsor response shape");
 }
@@ -115,7 +152,7 @@ export async function GET(req: NextRequest) {
   try {
     const cronSecret = process.env["CRON_SECRET"];
 
-    // Optional auth check
+    // Optional auth
     if (cronSecret) {
       const authHeader = req.headers.get("authorization");
 
@@ -136,6 +173,9 @@ export async function GET(req: NextRequest) {
       req.nextUrl.searchParams.get("date") ||
       getYesterdayBrisbaneDate();
 
+    console.log("SYNC DATE:", date);
+
+    // Fetch Windsor Google Ads campaign data
     const rows = await fetchWindsorData({
       connector: "google_ads",
       accounts: GOOGLE_ADS_ACCOUNTS,
@@ -144,6 +184,9 @@ export async function GET(req: NextRequest) {
       dateTo: date,
     });
 
+    console.log("ROWS RETURNED:", rows.length);
+
+    // Supabase
     const supabase = getSupabaseClient();
 
     const { error } = await supabase
@@ -166,6 +209,7 @@ export async function GET(req: NextRequest) {
       rows: rows.length,
     });
   } catch (error) {
+    console.error("SYNC ERROR:");
     console.error(error);
 
     return NextResponse.json(
