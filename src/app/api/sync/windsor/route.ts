@@ -2,22 +2,16 @@
  * Windsor → Supabase Daily Sync
  * File: src/app/api/sync/windsor/route.ts
  *
- * Pulls yesterday's data from Windsor.ai REST API for all clients/platforms
- * and upserts to Supabase metrics table.
- *
- * Vercel cron (vercel.json):
- * { "crons": [{ "path": "/api/sync/windsor", "schedule": "0 20 * * *" }] }
- *
- * Manual test: GET /api/sync/windsor?date=2026-05-15
+ * Daily sync: GET /api/sync/windsor
+ * Backfill:   GET /api/sync/windsor?date_from=2026-01-01&date_to=2026-05-16
+ * Single day: GET /api/sync/windsor?date=2026-05-15
+ * One client: GET /api/sync/windsor?date=2026-05-15&client=caloundra-mazda
  * Header: x-sync-secret: your-secret
- *
- * Sync single client: GET /api/sync/windsor?date=2026-05-15&client=caloundra-mazda
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 
-// ── Windsor REST API ──────────────────────────────────────────
 const WINDSOR_KEY = process.env.WINDSOR_API_KEY!;
 
 async function windsorFetch(
@@ -51,7 +45,6 @@ async function windsorFetch(
   return json.data ?? json ?? [];
 }
 
-// ── Client config ─────────────────────────────────────────────
 const CLIENTS: Record<
   string,
   { id: string; googleAds: string[]; meta: string[]; ga4: string[] }
@@ -100,7 +93,6 @@ const CLIENTS: Record<
   },
 };
 
-// ── GA4 event → schema column ─────────────────────────────────
 const GA4_EVENT_MAP: Record<string, string> = {
   contact_form: "form_submissions",
   vehicle_form: "form_submissions",
@@ -131,8 +123,6 @@ const GA4_EVENT_MAP: Record<string, string> = {
   customer_input: "customer_inputs",
 };
 
-// ── Helpers ───────────────────────────────────────────────────
-
 function formatDate(d: string): string {
   if (!d) return d;
   if (d.includes("-")) return d;
@@ -159,24 +149,21 @@ async function upsertRows(
   if (error) throw new Error(`Supabase upsert: ${error.message}`);
 }
 
-// ── Google Ads ────────────────────────────────────────────────
-
 async function syncGoogleAds(
   supabase: ReturnType<typeof getSupabaseClient>,
   clientId: string,
   accounts: string[],
-  date: string
+  dateFrom: string,
+  dateTo: string
 ): Promise<number> {
   if (!accounts.length) return 0;
-
   const data = await windsorFetch(
     "google_ads",
     accounts,
     ["date", "campaign", "campaign_type", "impressions", "clicks", "spend", "conversions", "ctr", "cpc"],
-    date,
-    date
+    dateFrom,
+    dateTo
   );
-
   const rows = data
     .filter((r: any) => r.date)
     .map((r: any) => ({
@@ -193,29 +180,25 @@ async function syncGoogleAds(
       ctr: r2(r.ctr),
       cpc: r2(r.cpc),
     }));
-
   await upsertRows(supabase, rows);
   return rows.length;
 }
-
-// ── Meta Ads ──────────────────────────────────────────────────
 
 async function syncMeta(
   supabase: ReturnType<typeof getSupabaseClient>,
   clientId: string,
   accounts: string[],
-  date: string
+  dateFrom: string,
+  dateTo: string
 ): Promise<number> {
   if (!accounts.length) return 0;
-
   const data = await windsorFetch(
     "facebook",
     accounts,
     ["date", "campaign_name", "campaign_objective", "impressions", "reach", "clicks", "spend", "actions_post_engagement"],
-    date,
-    date
+    dateFrom,
+    dateTo
   );
-
   const rows = data
     .filter((r: any) => r.date)
     .map((r: any) => ({
@@ -231,24 +214,22 @@ async function syncMeta(
       spend: r2(r.spend),
       post_engagements: ri(r.actions_post_engagement),
     }));
-
   await upsertRows(supabase, rows);
   return rows.length;
 }
-
-// ── GA4 Total row ─────────────────────────────────────────────
 
 async function syncGA4Total(
   supabase: ReturnType<typeof getSupabaseClient>,
   clientId: string,
   accounts: string[],
-  date: string
+  dateFrom: string,
+  dateTo: string
 ): Promise<number> {
   if (!accounts.length) return 0;
 
   const [sessionData, eventData] = await Promise.all([
-    windsorFetch("googleanalytics4", accounts, ["date", "sessions"], date, date),
-    windsorFetch("googleanalytics4", accounts, ["date", "event_name", "event_count"], date, date),
+    windsorFetch("googleanalytics4", accounts, ["date", "sessions"], dateFrom, dateTo),
+    windsorFetch("googleanalytics4", accounts, ["date", "event_name", "event_count"], dateFrom, dateTo),
   ]);
 
   const sessionsByDate: Record<string, number> = {};
@@ -304,13 +285,12 @@ async function syncGA4Total(
   return rows.length;
 }
 
-// ── GA4 Channel breakdown ─────────────────────────────────────
-
 async function syncGA4Channels(
   supabase: ReturnType<typeof getSupabaseClient>,
   clientId: string,
   accounts: string[],
-  date: string
+  dateFrom: string,
+  dateTo: string
 ): Promise<number> {
   if (!accounts.length) return 0;
 
@@ -318,8 +298,8 @@ async function syncGA4Channels(
     "googleanalytics4",
     accounts,
     ["date", "session_default_channel_group", "sessions"],
-    date,
-    date
+    dateFrom,
+    dateTo
   );
 
   const rows = data
@@ -342,25 +322,32 @@ async function syncGA4Channels(
   return rows.length;
 }
 
-// ── Main handler ──────────────────────────────────────────────
-
 export async function GET(req: NextRequest) {
-  // Auth
   const secret = req.headers.get("x-sync-secret");
   if (process.env.SYNC_SECRET && secret !== process.env.SYNC_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Date param — default yesterday AEST
-  const dateParam = req.nextUrl.searchParams.get("date");
-  const clientParam = req.nextUrl.searchParams.get("client");
+  const url = req.nextUrl;
+  const clientParam = url.searchParams.get("client");
 
-  let syncDate = dateParam;
-  if (!syncDate) {
+  // Date range support: date_from + date_to, or single date, or default yesterday
+  let dateFrom: string;
+  let dateTo: string;
+
+  if (url.searchParams.get("date_from") && url.searchParams.get("date_to")) {
+    dateFrom = url.searchParams.get("date_from")!;
+    dateTo = url.searchParams.get("date_to")!;
+  } else if (url.searchParams.get("date")) {
+    dateFrom = url.searchParams.get("date")!;
+    dateTo = dateFrom;
+  } else {
+    // Default: yesterday AEST
     const now = new Date();
-    now.setHours(now.getHours() + 10); // AEST offset
+    now.setHours(now.getHours() + 10);
     now.setDate(now.getDate() - 1);
-    syncDate = now.toISOString().split("T")[0];
+    dateFrom = now.toISOString().split("T")[0];
+    dateTo = dateFrom;
   }
 
   const supabase = getSupabaseClient();
@@ -374,25 +361,25 @@ export async function GET(req: NextRequest) {
     results[slug] = { googleAds: 0, meta: 0, ga4Total: 0, ga4Channels: 0, errors: [] };
 
     try {
-      results[slug].googleAds = await syncGoogleAds(supabase, config.id, config.googleAds, syncDate);
+      results[slug].googleAds = await syncGoogleAds(supabase, config.id, config.googleAds, dateFrom, dateTo);
     } catch (e: any) {
       results[slug].errors.push(`Google Ads: ${e.message}`);
     }
 
     try {
-      results[slug].meta = await syncMeta(supabase, config.id, config.meta, syncDate);
+      results[slug].meta = await syncMeta(supabase, config.id, config.meta, dateFrom, dateTo);
     } catch (e: any) {
       results[slug].errors.push(`Meta: ${e.message}`);
     }
 
     try {
-      results[slug].ga4Total = await syncGA4Total(supabase, config.id, config.ga4, syncDate);
+      results[slug].ga4Total = await syncGA4Total(supabase, config.id, config.ga4, dateFrom, dateTo);
     } catch (e: any) {
       results[slug].errors.push(`GA4 Total: ${e.message}`);
     }
 
     try {
-      results[slug].ga4Channels = await syncGA4Channels(supabase, config.id, config.ga4, syncDate);
+      results[slug].ga4Channels = await syncGA4Channels(supabase, config.id, config.ga4, dateFrom, dateTo);
     } catch (e: any) {
       results[slug].errors.push(`GA4 Channels: ${e.message}`);
     }
@@ -401,7 +388,8 @@ export async function GET(req: NextRequest) {
   const totalErrors = Object.values(results).flatMap((r: any) => r.errors);
 
   return NextResponse.json({
-    syncDate,
+    dateFrom,
+    dateTo,
     results,
     totalErrors: totalErrors.length,
     timestamp: new Date().toISOString(),
