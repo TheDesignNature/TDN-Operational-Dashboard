@@ -14,6 +14,19 @@ const GOOGLE_ADS_ACCOUNTS = [
   "634-706-2401", // KKCS
 ];
 
+const GA4_ACCOUNTS = [
+  "429660359", // Powershift
+  "453414198", // KKCS Website
+  "438412297", // Caloundra Mazda - GA4
+  "519378025", // Sell a Car Today
+  "408732517", // Caloundra City Autos
+  "537738074", // KKCS Study Hub
+  "525608521", // Foundation Home Mods Website
+
+  // Excluded for now:
+  // "522542626", // KKCS Careers
+];
+
 const GOOGLE_ADS_CAMPAIGN_FIELDS = [
   "date",
   "account_id",
@@ -69,20 +82,74 @@ const GOOGLE_ADS_SEARCH_TERM_FIELDS = [
   "account_name",
   "campaign_id",
   "campaign_name",
-  "campaign",
   "ad_group_id",
   "ad_group_name",
-  "ad_group",
   "search_term",
   "search_term_match_type",
-  "match_type",
   "impressions",
   "clicks",
   "cost",
-  "spend",
   "conversions",
-  "conversion_value",
-  "conversions_value",
+];
+
+const GA4_TRAFFIC_FIELDS = [
+  "date",
+  "account_id",
+  "account_name",
+  "property_id",
+  "property_name",
+  "session_source",
+  "session_medium",
+  "session_campaign",
+  "first_user_source",
+  "first_user_medium",
+  "first_user_campaign",
+  "default_channel_group",
+  "session_default_channel_group",
+  "landing_page",
+  "page_path",
+  "device_category",
+  "country",
+  "sessions",
+  "users",
+  "total_users",
+  "new_users",
+  "engaged_sessions",
+  "engagement_rate",
+  "average_session_duration",
+  "screen_page_views",
+  "page_views",
+  "key_events",
+  "conversions",
+  "total_revenue",
+];
+
+const GA4_EVENT_FIELDS = [
+  "date",
+  "account_id",
+  "account_name",
+  "property_id",
+  "property_name",
+  "event_name",
+  "event_category",
+  "event_action",
+  "event_label",
+  "form_id",
+  "page_path",
+  "landing_page",
+  "session_source",
+  "session_medium",
+  "session_campaign",
+  "default_channel_group",
+  "session_default_channel_group",
+  "country",
+  "device_category",
+  "event_count",
+  "events",
+  "total_users",
+  "users",
+  "key_events",
+  "conversions",
 ];
 
 function getYesterdayBrisbaneDate(): string {
@@ -148,7 +215,7 @@ async function fetchWindsorData({
     console.log(text);
 
     throw new Error(
-      `Windsor API failed (${response.status}): ${text}`
+      `Windsor API failed for ${connector} (${response.status}): ${text}`
     );
   }
 
@@ -157,7 +224,7 @@ async function fetchWindsorData({
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error("Windsor returned invalid JSON");
+    throw new Error(`Windsor returned invalid JSON for ${connector}`);
   }
 
   if (Array.isArray(json)) {
@@ -182,7 +249,7 @@ async function fetchWindsorData({
     return (json as any).data;
   }
 
-  throw new Error("Unexpected Windsor response shape");
+  throw new Error(`Unexpected Windsor response shape for ${connector}`);
 }
 
 async function upsertRows({
@@ -199,6 +266,7 @@ async function upsertRows({
   if (!rows.length) {
     return {
       table,
+      mode: "upsert",
       rows: 0,
     };
   }
@@ -217,6 +285,54 @@ async function upsertRows({
 
   return {
     table,
+    mode: "upsert",
+    rows: rows.length,
+  };
+}
+
+async function replaceRowsForDate({
+  table,
+  date,
+  rows,
+}: {
+  table: string;
+  date: string;
+  rows: Record<string, unknown>[];
+}) {
+  const supabase = getSupabaseClient();
+
+  const { error: deleteError } = await supabase
+    .from(table)
+    .delete()
+    .eq("date", date);
+
+  if (deleteError) {
+    throw new Error(
+      `Supabase delete failed for ${table}: ${deleteError.message}`
+    );
+  }
+
+  if (!rows.length) {
+    return {
+      table,
+      mode: "replace_date",
+      rows: 0,
+    };
+  }
+
+  const { error: insertError } = await supabase
+    .from(table)
+    .insert(rows);
+
+  if (insertError) {
+    throw new Error(
+      `Supabase insert failed for ${table}: ${insertError.message}`
+    );
+  }
+
+  return {
+    table,
+    mode: "replace_date",
     rows: rows.length,
   };
 }
@@ -242,6 +358,7 @@ function addSearchTermRowKey(rows: any[]) {
       row.campaign_id,
       row.ad_group_id || "NO_AD_GROUP",
       row.search_term || "NO_SEARCH_TERM",
+      row.search_term_match_type || "NO_MATCH_TYPE",
     ].join("|"),
   }));
 }
@@ -274,6 +391,9 @@ export async function GET(req: NextRequest) {
 
     const results = [];
 
+    /**
+     * 1. GOOGLE ADS — CAMPAIGN DAILY
+     */
     const campaignRows = await fetchWindsorData({
       connector: "google_ads",
       accounts: GOOGLE_ADS_ACCOUNTS,
@@ -290,6 +410,9 @@ export async function GET(req: NextRequest) {
       })
     );
 
+    /**
+     * 2. GOOGLE ADS — AD GROUP DAILY
+     */
     const adgroupRowsRaw = await fetchWindsorData({
       connector: "google_ads",
       accounts: GOOGLE_ADS_ACCOUNTS,
@@ -308,6 +431,9 @@ export async function GET(req: NextRequest) {
       })
     );
 
+    /**
+     * 3. GOOGLE ADS — SEARCH TERMS DAILY
+     */
     const searchTermRowsRaw = await fetchWindsorData({
       connector: "google_ads",
       accounts: GOOGLE_ADS_ACCOUNTS,
@@ -323,6 +449,47 @@ export async function GET(req: NextRequest) {
         table: "windsor_google_ads_search_terms_daily",
         rows: searchTermRows,
         onConflict: "row_key",
+      })
+    );
+
+    /**
+     * 4. GA4 — TRAFFIC DAILY
+     *
+     * GA4 dimensions can create null-heavy / duplicate-looking rows,
+     * so we replace the requested date rather than upsert.
+     */
+    const ga4TrafficRows = await fetchWindsorData({
+      connector: "googleanalytics4",
+      accounts: GA4_ACCOUNTS,
+      fields: GA4_TRAFFIC_FIELDS,
+      dateFrom: date,
+      dateTo: date,
+    });
+
+    results.push(
+      await replaceRowsForDate({
+        table: "windsor_ga4_traffic_daily",
+        date,
+        rows: ga4TrafficRows,
+      })
+    );
+
+    /**
+     * 5. GA4 — EVENTS DAILY
+     */
+    const ga4EventRows = await fetchWindsorData({
+      connector: "googleanalytics4",
+      accounts: GA4_ACCOUNTS,
+      fields: GA4_EVENT_FIELDS,
+      dateFrom: date,
+      dateTo: date,
+    });
+
+    results.push(
+      await replaceRowsForDate({
+        table: "windsor_ga4_events_daily",
+        date,
+        rows: ga4EventRows,
       })
     );
 
