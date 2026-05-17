@@ -8,10 +8,10 @@ export const maxDuration = 300;
 const GOOGLE_ADS_ACCOUNTS = [
   "471-274-1629", // Cal City Auto
   "781-874-7809", // Foundation Home Mods
-  "216-362-0049", // Powershift
-  "564-674-4247", // Sell A Car
+  "216-362-0049", // Powershift Technologies
+  "564-674-4247", // Sell A Car Today
   "839-267-2215", // Caloundra Mazda
-  "634-706-2401", // KKCS
+  "634-706-2401", // Kurri Kurri Community Services
 ];
 
 const GA4_ACCOUNTS = [
@@ -23,7 +23,7 @@ const GA4_ACCOUNTS = [
   "537738074", // KKCS Study Hub
   "525608521", // Foundation Home Mods Website
 
-  // Excluded for now:
+  // Excluded for now because it is not part of the current reporting engine:
   // "522542626", // KKCS Careers
 ];
 
@@ -131,6 +131,8 @@ const GA4_EVENT_FIELDS = [
   "conversions",
 ];
 
+type WindsorRow = Record<string, unknown>;
+
 function getYesterdayBrisbaneDate(): string {
   const now = new Date();
 
@@ -157,7 +159,7 @@ async function fetchWindsorData({
   fields: string[];
   dateFrom: string;
   dateTo: string;
-}) {
+}): Promise<WindsorRow[]> {
   const apiKey = process.env["WINDSOR_API_KEY"];
 
   if (!apiKey) {
@@ -207,25 +209,25 @@ async function fetchWindsorData({
   }
 
   if (Array.isArray(json)) {
-    return json;
+    return json as WindsorRow[];
   }
 
   if (
     typeof json === "object" &&
     json !== null &&
     "result" in json &&
-    Array.isArray((json as any).result)
+    Array.isArray((json as { result: unknown }).result)
   ) {
-    return (json as any).result;
+    return (json as { result: WindsorRow[] }).result;
   }
 
   if (
     typeof json === "object" &&
     json !== null &&
     "data" in json &&
-    Array.isArray((json as any).data)
+    Array.isArray((json as { data: unknown }).data)
   ) {
-    return (json as any).data;
+    return (json as { data: WindsorRow[] }).data;
   }
 
   throw new Error(`Unexpected Windsor response shape for ${connector}`);
@@ -237,7 +239,7 @@ async function upsertRows({
   onConflict,
 }: {
   table: string;
-  rows: Record<string, unknown>[];
+  rows: WindsorRow[];
   onConflict: string;
 }) {
   const supabase = getSupabaseClient();
@@ -276,7 +278,7 @@ async function replaceRowsForDate({
 }: {
   table: string;
   date: string;
-  rows: Record<string, unknown>[];
+  rows: WindsorRow[];
 }) {
   const supabase = getSupabaseClient();
 
@@ -316,7 +318,7 @@ async function replaceRowsForDate({
   };
 }
 
-function addAdgroupRowKey(rows: any[]) {
+function addAdgroupRowKey(rows: WindsorRow[]): WindsorRow[] {
   return rows.map((row) => ({
     ...row,
     row_key: [
@@ -328,7 +330,7 @@ function addAdgroupRowKey(rows: any[]) {
   }));
 }
 
-function addSearchTermRowKey(rows: any[]) {
+function addSearchTermRowKey(rows: WindsorRow[]): WindsorRow[] {
   return rows.map((row) => ({
     ...row,
     row_key: [
@@ -339,6 +341,83 @@ function addSearchTermRowKey(rows: any[]) {
       row.search_term || "NO_SEARCH_TERM",
       row.search_term_match_type || "NO_MATCH_TYPE",
     ].join("|"),
+  }));
+}
+
+function mapGA4TrafficRows(rows: WindsorRow[]): WindsorRow[] {
+  return rows.map((row) => ({
+    date: row.date,
+    account_id: row.account_id,
+    account_name: row.account_name,
+
+    property_id: row.stream_id,
+    property_name: row.stream_name,
+
+    session_source: row.source,
+    session_medium: row.medium,
+    session_campaign: row.campaign,
+
+    first_user_source: null,
+    first_user_medium: null,
+    first_user_campaign: null,
+
+    default_channel_group: row.default_channel_group,
+    session_default_channel_group: row.default_channel_group,
+
+    landing_page: null,
+    page_path: null,
+    device_category: null,
+    country: null,
+
+    sessions: row.sessions,
+    users: row.users,
+    total_users: row.totalusers,
+    new_users: row.newusers,
+    engaged_sessions: row.engaged_sessions,
+    engagement_rate: row.engagement_rate,
+    average_session_duration: row.average_session_duration,
+    screen_page_views: row.screen_page_views,
+    page_views: row.screen_page_views,
+    key_events: row.conversions,
+    conversions: row.conversions,
+    total_revenue: row.totalrevenue,
+  }));
+}
+
+function mapGA4EventRows(rows: WindsorRow[]): WindsorRow[] {
+  return rows.map((row) => ({
+    date: row.date,
+    account_id: row.account_id,
+    account_name: row.account_name,
+
+    property_id: row.stream_id,
+    property_name: row.stream_name,
+
+    event_name: row.event_name,
+    event_category: null,
+    event_action: null,
+    event_label: null,
+    form_id: null,
+
+    page_path: null,
+    landing_page: null,
+
+    session_source: row.source,
+    session_medium: row.medium,
+    session_campaign: row.campaign,
+
+    default_channel_group: row.default_channel_group,
+    session_default_channel_group: row.default_channel_group,
+
+    country: null,
+    device_category: null,
+
+    event_count: row.event_count,
+    events: row.event_count,
+    total_users: row.totalusers,
+    users: row.users,
+    key_events: row.conversions,
+    conversions: row.conversions,
   }));
 }
 
@@ -433,17 +512,16 @@ export async function GET(req: NextRequest) {
 
     /**
      * 4. GA4 — TRAFFIC DAILY
-     *
-     * GA4 dimensions can create null-heavy / duplicate-looking rows,
-     * so we replace the requested date rather than upsert.
      */
-    const ga4TrafficRows = await fetchWindsorData({
+    const ga4TrafficRowsRaw = await fetchWindsorData({
       connector: "googleanalytics4",
       accounts: GA4_ACCOUNTS,
       fields: GA4_TRAFFIC_FIELDS,
       dateFrom: date,
       dateTo: date,
     });
+
+    const ga4TrafficRows = mapGA4TrafficRows(ga4TrafficRowsRaw);
 
     results.push(
       await replaceRowsForDate({
@@ -456,13 +534,15 @@ export async function GET(req: NextRequest) {
     /**
      * 5. GA4 — EVENTS DAILY
      */
-    const ga4EventRows = await fetchWindsorData({
+    const ga4EventRowsRaw = await fetchWindsorData({
       connector: "googleanalytics4",
       accounts: GA4_ACCOUNTS,
       fields: GA4_EVENT_FIELDS,
       dateFrom: date,
       dateTo: date,
     });
+
+    const ga4EventRows = mapGA4EventRows(ga4EventRowsRaw);
 
     results.push(
       await replaceRowsForDate({
