@@ -42,10 +42,52 @@ const GOOGLE_ADS_CAMPAIGN_FIELDS = [
   "search_absolute_top_impression_share",
 ];
 
+const GOOGLE_ADS_ADGROUP_FIELDS = [
+  "date",
+  "account_id",
+  "account_name",
+  "campaign_id",
+  "campaign_name",
+  "campaign",
+  "ad_group_id",
+  "ad_group_name",
+  "ad_group",
+  "impressions",
+  "clicks",
+  "cost",
+  "spend",
+  "ctr",
+  "average_cpc",
+  "conversions",
+  "conversion_value",
+  "conversions_value",
+];
+
+const GOOGLE_ADS_SEARCH_TERM_FIELDS = [
+  "date",
+  "account_id",
+  "account_name",
+  "campaign_id",
+  "campaign_name",
+  "campaign",
+  "ad_group_id",
+  "ad_group_name",
+  "ad_group",
+  "search_term",
+  "search_term_match_type",
+  "match_type",
+  "impressions",
+  "clicks",
+  "cost",
+  "spend",
+  "conversions",
+  "conversion_value",
+  "conversions_value",
+];
+
 function getYesterdayBrisbaneDate(): string {
   const now = new Date();
 
-  // Brisbane UTC+10
   const brisbaneNow = new Date(
     now.getTime() + 10 * 60 * 60 * 1000
   );
@@ -78,22 +120,16 @@ async function fetchWindsorData({
 
   const params = new URLSearchParams();
 
-  // Windsor auth
   params.set("api_key", apiKey);
-
-  // Query params
   params.set("accounts", accounts.join(","));
   params.set("fields", fields.join(","));
   params.set("date_from", dateFrom);
   params.set("date_to", dateTo);
 
-  // Connector-specific endpoint
   const url = `https://connectors.windsor.ai/${connector}?${params.toString()}`;
 
   console.log("WINDSOR URL:");
-  console.log(
-    url.replace(apiKey, "***HIDDEN***")
-  );
+  console.log(url.replace(apiKey, "***HIDDEN***"));
 
   const response = await fetch(url, {
     method: "GET",
@@ -106,10 +142,11 @@ async function fetchWindsorData({
   const text = await response.text();
 
   console.log("WINDSOR STATUS:", response.status);
-  console.log("WINDSOR RESPONSE:");
-  console.log(text);
 
   if (!response.ok) {
+    console.log("WINDSOR RESPONSE:");
+    console.log(text);
+
     throw new Error(
       `Windsor API failed (${response.status}): ${text}`
     );
@@ -148,11 +185,46 @@ async function fetchWindsorData({
   throw new Error("Unexpected Windsor response shape");
 }
 
+async function upsertRows({
+  table,
+  rows,
+  onConflict,
+}: {
+  table: string;
+  rows: Record<string, unknown>[];
+  onConflict: string;
+}) {
+  const supabase = getSupabaseClient();
+
+  if (!rows.length) {
+    return {
+      table,
+      rows: 0,
+    };
+  }
+
+  const { error } = await supabase
+    .from(table)
+    .upsert(rows, {
+      onConflict,
+    });
+
+  if (error) {
+    throw new Error(
+      `Supabase upsert failed for ${table}: ${error.message}`
+    );
+  }
+
+  return {
+    table,
+    rows: rows.length,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const cronSecret = process.env["CRON_SECRET"];
 
-    // Optional auth
     if (cronSecret) {
       const authHeader = req.headers.get("authorization");
 
@@ -175,8 +247,9 @@ export async function GET(req: NextRequest) {
 
     console.log("SYNC DATE:", date);
 
-    // Fetch Windsor Google Ads campaign data
-    const rows = await fetchWindsorData({
+    const results = [];
+
+    const campaignRows = await fetchWindsorData({
       connector: "google_ads",
       accounts: GOOGLE_ADS_ACCOUNTS,
       fields: GOOGLE_ADS_CAMPAIGN_FIELDS,
@@ -184,29 +257,50 @@ export async function GET(req: NextRequest) {
       dateTo: date,
     });
 
-    console.log("ROWS RETURNED:", rows.length);
-
-    // Supabase
-    const supabase = getSupabaseClient();
-
-    const { error } = await supabase
-      .from("windsor_google_ads_campaign_daily")
-      .upsert(rows, {
+    results.push(
+      await upsertRows({
+        table: "windsor_google_ads_campaign_daily",
+        rows: campaignRows,
         onConflict: "date,account_id,campaign_id",
-      });
+      })
+    );
 
-    if (error) {
-      throw new Error(
-        `Supabase upsert failed: ${error.message}`
-      );
-    }
+    const adgroupRows = await fetchWindsorData({
+      connector: "google_ads",
+      accounts: GOOGLE_ADS_ACCOUNTS,
+      fields: GOOGLE_ADS_ADGROUP_FIELDS,
+      dateFrom: date,
+      dateTo: date,
+    });
+
+    results.push(
+      await upsertRows({
+        table: "windsor_google_ads_adgroup_daily",
+        rows: adgroupRows,
+        onConflict: "date,account_id,campaign_id,ad_group_id",
+      })
+    );
+
+    const searchTermRows = await fetchWindsorData({
+      connector: "google_ads",
+      accounts: GOOGLE_ADS_ACCOUNTS,
+      fields: GOOGLE_ADS_SEARCH_TERM_FIELDS,
+      dateFrom: date,
+      dateTo: date,
+    });
+
+    results.push(
+      await upsertRows({
+        table: "windsor_google_ads_search_terms_daily",
+        rows: searchTermRows,
+        onConflict: "date,account_id,campaign_id,ad_group_id,search_term",
+      })
+    );
 
     return NextResponse.json({
       ok: true,
       date,
-      sync: "google_ads_campaign_daily",
-      table: "windsor_google_ads_campaign_daily",
-      rows: rows.length,
+      results,
     });
   } catch (error) {
     console.error("SYNC ERROR:");
