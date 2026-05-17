@@ -84,7 +84,7 @@ async function fetchWindsorData({
   params.set("date_from", dateFrom);
   params.set("date_to", dateTo);
 
-  const url = `https://connectors.windsor.ai/all?${params.toString()}`;
+const url = `https://connectors.windsor.ai/${connector}?${params.toString()}`;
 
   const response = await fetch(url, {
     method: "GET",
