@@ -271,7 +271,7 @@ export function DrillDownTable({ clientId }: Props) {
           {/* Footer */}
           <div className="px-4 py-2.5 border-t border-sand/20 bg-stone/20 flex items-center justify-between">
             <p className="text-2xs text-teal/30">
-              Source: <code className="font-mono">source_data_by_campaign</code> view
+              Source: <code className="font-mono">fact_paid_campaign_daily</code> / <code className="font-mono">fact_events_daily</code>
             </p>
             <p className="text-2xs text-teal/30">
               {filtered.length} rows · {grouped.size} sources

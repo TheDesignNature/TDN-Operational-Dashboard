@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase";
+import { CLIENT_UUIDS } from "@/lib/clientIds";
 
 export interface SourceDataRow {
   client: string;
@@ -43,45 +43,29 @@ export interface SourceDataRow {
   latest: string | null;
 }
 
-const CLIENT_UUIDS: Record<string, string> = {
-  "powershift":           "b2d53ecf-f700-42e4-93e9-8cea66fcede6",
-  "kkcs":                 "b04e39ae-ef5f-43dc-aeed-76959567f63a",
-  "foundation-home":      "126e2bbc-95db-45da-a401-c986658f76e4",
-  "study-hub":            "1c65ba78-c4bb-430d-94d0-729e16706bdf",
-  "caloundra-city-auto":  "2144357d-8438-4d24-9fe7-c1d46cdf37b4",
-  "caloundra-mazda":      "08bcfac7-1032-4279-9bc0-2566c9284fc5",
-  "sell-a-car":           "af3cdca0-6866-427c-bfc5-0241d7fe9905",
-};
-
+/**
+ * Fetches campaign-level drill-down data via the server-side API route
+ * (which queries fact_paid_campaign_daily / fact_website_channel_daily /
+ * fact_events_daily). Previously queried a nonexistent `source_data_by_campaign`
+ * view directly from the browser using a server-only Supabase key.
+ */
 export async function getSourceData(
   clientId: string,
   monthDate?: string
 ): Promise<SourceDataRow[]> {
-  const uuid = CLIENT_UUIDS[clientId];
-  if (!uuid) return [];
+  if (!CLIENT_UUIDS[clientId]) return [];
 
-  const supabase = getSupabaseClient();
+  const url = monthDate
+    ? `/api/clients/${clientId}/drilldown?month=${monthDate}`
+    : `/api/clients/${clientId}/drilldown`;
 
-  let query = supabase
-    .from("source_data_by_campaign")
-    .select("*")
-    .eq("client_id", uuid)
-    .order("month_date", { ascending: false })
-    .order("data_source")
-    .order("campaign_name");
-
-  if (monthDate) {
-    query = query.eq("month_date", monthDate);
-  } else {
-    // Default: last 3 months
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - 3);
-    query = query.gte("month_date", cutoff.toISOString().split("T")[0]);
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to load source data (${res.status})`);
   }
-
-  const { data, error } = await query;
-  if (error) throw new Error(`Failed to load source data: ${error.message}`);
-  return (data ?? []) as SourceDataRow[];
+  const body = await res.json();
+  return (body.rows ?? []) as SourceDataRow[];
 }
 
 export function getAvailableMonths(rows: SourceDataRow[]): string[] {

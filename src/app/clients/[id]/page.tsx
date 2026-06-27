@@ -170,51 +170,10 @@ function SpendByChannelChart({ clientId }: { clientId: string }) {
 
   useEffect(() => {
     async function load() {
-      const { getSupabaseClient } = await import("@/lib/supabase");
-      const clientUUIDs: Record<string, string> = {
-        "powershift":           "b2d53ecf-f700-42e4-93e9-8cea66fcede6",
-        "kkcs":                 "b04e39ae-ef5f-43dc-aeed-76959567f63a",
-        "foundation-home":      "126e2bbc-95db-45da-a401-c986658f76e4",
-        "study-hub":            "1c65ba78-c4bb-430d-94d0-729e16706bdf",
-        "caloundra-city-auto":  "2144357d-8438-4d24-9fe7-c1d46cdf37b4",
-        "caloundra-mazda":      "08bcfac7-1032-4279-9bc0-2566c9284fc5",
-        "sell-a-car":           "af3cdca0-6866-427c-bfc5-0241d7fe9905",
-      };
-      const uuid = clientUUIDs[clientId];
-      if (!uuid) return;
-
-      const supabase = getSupabaseClient();
-      const cutoff = new Date();
-      cutoff.setMonth(cutoff.getMonth() - 13);
-
-      const { data } = await supabase
-        .from("metrics")
-        .select("metric_date, data_source, spend")
-        .eq("client_id", uuid)
-        .in("data_source", ["google_ads", "meta_ads"])
-        .gte("metric_date", cutoff.toISOString().split("T")[0])
-        .order("metric_date");
-
-      if (!data?.length) return;
-
-      const byMonth: Record<string, { Google: number; Meta: number }> = {};
-      data.forEach((row: any) => {
-        const m = row.metric_date.substring(0, 7);
-        if (!byMonth[m]) byMonth[m] = { Google: 0, Meta: 0 };
-        if (row.data_source === "google_ads") byMonth[m].Google += row.spend ?? 0;
-        else if (row.data_source === "meta_ads") byMonth[m].Meta += row.spend ?? 0;
-      });
-
-      setChannelData(
-        Object.entries(byMonth)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .slice(-13)
-          .map(([month, v]) => ({
-            month: new Date(month + "-01").toLocaleDateString("en-AU", { month: "short" }),
-            Google: Math.round(v.Google * 100) / 100,
-            Meta: Math.round(v.Meta * 100) / 100,
-          }))
-      );
+      const res = await fetch(`/api/clients/${clientId}/spend-by-channel`);
+      if (!res.ok) return;
+      const body = await res.json();
+      setChannelData(body.rows ?? []);
     }
     load();
   }, [clientId]);

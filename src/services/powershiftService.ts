@@ -1,51 +1,13 @@
 /**
- * Powershift reporting service
+ * Powershift month-to-date service.
  *
- * Queries the `powershift_monthly_report` view in Supabase.
- * Column names match the actual view schema.
+ * Previously queried nonexistent `powershift_monthly_report` / `powershift_mtd`
+ * Supabase views directly from the browser using the service-role key (which
+ * can't work client-side regardless of view names). Now fetches from the
+ * server-side /api/clients/[id]/mtd route, which computes MTD live from
+ * fact_paid_campaign_daily / fact_website_channel_daily / fact_events_daily.
  */
 
-import { getSupabaseClient } from "@/lib/supabase";
-import type { PowershiftMonthlyRow } from "@/types";
-
-/**
- * Fetches all rows from powershift_monthly_report, ordered by date ascending.
- */
-export async function getPowershiftMonthlyReport(): Promise<PowershiftMonthlyRow[]> {
-  const supabase = getSupabaseClient();
-
-  const { data, error } = await supabase
-    .from("powershift_monthly_report")
-    .select("*")
-    .order("metric_date", { ascending: true }); // cache bust
-
-  if (error) {
-    throw new Error(`Failed to load Powershift report: ${error.message}`);
-  }
-
-  return (data as PowershiftMonthlyRow[]) ?? [];
-}
-
-/**
- * Returns the most recent month's row for summary cards.
- */
-export async function getLatestPowershiftMonth(): Promise<PowershiftMonthlyRow | null> {
-  const supabase = getSupabaseClient();
-
-  const { data, error } = await supabase
-    .from("powershift_monthly_report")
-    .select("*")
-    .order("metric_date", { ascending: false })
-    .limit(1)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw new Error(`Failed to load latest Powershift data: ${error.message}`);
-  }
-
-  return data as PowershiftMonthlyRow;
-}
 export interface PowershiftMTD {
   month_label: string;
   spend_mtd: number;
@@ -63,17 +25,11 @@ export interface PowershiftMTD {
 }
 
 export async function getPowershiftMTD(): Promise<PowershiftMTD | null> {
-  const supabase = getSupabaseClient();
-
-  const { data, error } = await supabase
-    .from("powershift_mtd")
-    .select("*")
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw new Error(`Failed to load Powershift MTD: ${error.message}`);
+  const res = await fetch(`/api/clients/powershift/mtd`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to load Powershift MTD (${res.status})`);
   }
-
-  return data as PowershiftMTD;
+  const body = await res.json();
+  return (body.mtd ?? null) as PowershiftMTD | null;
 }

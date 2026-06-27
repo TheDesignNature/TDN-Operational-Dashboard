@@ -1,18 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase";
-
-// Maps client slug → Supabase view name
-const CLIENT_VIEWS: Record<string, string> = {
-  "powershift":           "powershift_monthly_report",
-  "kkcs":                 "kkcs_monthly_report",
-  "foundation-home":      "fhm_monthly_report",
-  "study-hub":            "studyhub_monthly_report",
-  "caloundra-city-auto":  "cal_city_monthly_report",
-  "caloundra-mazda":      "cal_mazda_monthly_report",
-  "sell-a-car":           "sac_monthly_report",
-};
-
-// Sell a Car uses bookings not enquiries
-const BOOKING_CLIENTS = new Set(["sell-a-car"]);
+import { CLIENT_UUIDS, BOOKING_CLIENTS } from "@/lib/clientIds";
 
 export interface MonthlyReportRow {
   metric_date: string;
@@ -47,34 +33,35 @@ export interface MonthlyReportRow {
 }
 
 export interface ClientReportConfig {
-  viewName: string;
   isBookingClient: boolean;
   enquiryLabel: string;    // "Enquiries" or "Bookings"
   cplLabel: string;        // "Cost per lead" or "Cost per booking"
 }
 
 export function getClientConfig(clientId: string): ClientReportConfig | null {
-  const viewName = CLIENT_VIEWS[clientId];
-  if (!viewName) return null;
+  if (!CLIENT_UUIDS[clientId]) return null;
   const isBookingClient = BOOKING_CLIENTS.has(clientId);
   return {
-    viewName,
     isBookingClient,
     enquiryLabel: isBookingClient ? "Bookings" : "Enquiries",
     cplLabel: isBookingClient ? "Cost per booking" : "Cost per lead",
   };
 }
 
+/**
+ * Fetches the monthly report via the server-side API route (which queries
+ * report_monthly_comparison using the service-role key). This used to query
+ * Supabase directly for a nonexistent `${clientId}_monthly_report` view, and
+ * tried to do so from the browser using a server-only key — neither worked.
+ */
 export async function getClientMonthlyReport(clientId: string): Promise<MonthlyReportRow[]> {
-  const config = getClientConfig(clientId);
-  if (!config) return [];
+  if (!getClientConfig(clientId)) return [];
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from(config.viewName)
-    .select("*")
-    .order("metric_date");
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as MonthlyReportRow[];
+  const res = await fetch(`/api/clients/${clientId}/report`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to load report (${res.status})`);
+  }
+  const body = await res.json();
+  return (body.rows ?? []) as MonthlyReportRow[];
 }
