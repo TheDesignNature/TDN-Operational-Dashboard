@@ -18,6 +18,26 @@ export const CLIENT_UUIDS: Record<string, string> = {
 /** Sell a Car uses "bookings" terminology instead of "enquiries". */
 export const BOOKING_CLIENTS = new Set(["sell-a-car"]);
 
+/**
+ * The `clients` table doesn't have `industry` populated yet (all rows are
+ * NULL as of June 2026) — this is a display-only fallback, not derived
+ * data, so it doesn't belong in the insights engine.
+ */
+export const CLIENT_INDUSTRIES: Record<string, string> = {
+  "powershift": "Technologies",
+  "kkcs": "Education",
+  "foundation-home": "Home Services",
+  "study-hub": "Education",
+  "caloundra-city-auto": "Automotive",
+  "caloundra-mazda": "Automotive",
+  "sell-a-car": "Automotive",
+};
+
 export function getClientUuid(slug: string): string | null {
   return CLIENT_UUIDS[slug] ?? null;
+}
+
+export function getClientSlug(uuid: string): string | null {
+  const entry = Object.entries(CLIENT_UUIDS).find(([, v]) => v === uuid);
+  return entry ? entry[0] : null;
 }

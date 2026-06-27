@@ -67,11 +67,11 @@ export interface Task {
   order: number; // for drag-and-drop / up-down ordering
 }
 
-// ── AI / OpenClaw output shapes ───────────────────────────────
-// These interfaces define exactly what we expect from the AI layer.
-// Mock data currently satisfies these. When OpenClaw is connected,
-// replace the mock functions in services/openClawService.ts with
-// real API calls that return the same shapes.
+// ── Insights / alerts output shapes ───────────────────────────
+// These interfaces define what the rule-based insights engine
+// (src/lib/insightsEngine.ts) returns, served via the API routes
+// and consumed by services/openClawService.ts. No AI/LLM involved —
+// "OpenClaw" is a legacy name kept for the service file only.
 
 export interface Insight {
   id: string;

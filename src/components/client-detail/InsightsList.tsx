@@ -5,39 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { getSeverityClass } from "@/lib/statusHelpers";
 import { formatRelativeDate } from "@/lib/formatters";
-import { getInsightsForClient } from "@/services/openClawService";
+import { getClientInsightsAndActions } from "@/services/openClawService";
 import type { Insight } from "@/types";
-
-const SUGGESTED_ACTIONS: Record<string, string[]> = {
-  powershift: [
-    "Audit landing page load speed and form functionality on mobile",
-    "Review search term report for audience quality — look for broad match bleed",
-    "Check auction insights for increased competitor activity",
-    "Compare current ad copy CTR against previous period",
-  ],
-  kkcs: [
-    "Review highest-traffic landing pages for conversion friction",
-    "Check form completion rate vs form view rate",
-    "Test page speed on mobile — common cause of flat conversion",
-  ],
-  "caloundra-mazda": [
-    "Review campaign structure and bid strategy for efficiency",
-    "Audit negative keyword list — CPL creep often signals audience pollution",
-    "Check ad scheduling for off-peak spend waste",
-  ],
-  "foundation-home": [
-    "Check all active ad approval statuses",
-    "Review audience size — exhaustion causes delivery failures",
-    "Audit daily budget caps — ensure they are not too low for monthly targets",
-    "Check bid strategy — consider switching to Max Conversions with target CPA",
-  ],
-};
-
-const DEFAULT_ACTIONS = [
-  "Review campaign performance vs target metrics",
-  "Check search term and audience reports",
-  "Audit ad creative performance — identify top and bottom performers",
-];
 
 interface InsightsListProps {
   clientId: string;
@@ -45,16 +14,16 @@ interface InsightsListProps {
 
 export function InsightsList({ clientId }: InsightsListProps) {
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [suggestedActions, setSuggestedActions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getInsightsForClient(clientId).then((data: Insight[]) => {
-      setInsights(data);
+    getClientInsightsAndActions(clientId).then(({ insights, suggestedActions }) => {
+      setInsights(insights);
+      setSuggestedActions(suggestedActions);
       setLoading(false);
     });
   }, [clientId]);
-
-  const suggestedActions = SUGGESTED_ACTIONS[clientId] ?? DEFAULT_ACTIONS;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
@@ -64,7 +33,7 @@ export function InsightsList({ clientId }: InsightsListProps) {
             Insights
           </h3>
           <span className="text-2xs text-teal/30 bg-blue-pale px-2 py-0.5 rounded border border-blue/10">
-            AI · mock data
+            Computed from live data
           </span>
         </div>
 
@@ -93,7 +62,7 @@ export function InsightsList({ clientId }: InsightsListProps) {
             Suggested actions
           </h3>
           <span className="text-2xs text-teal/30 bg-blue-pale px-2 py-0.5 rounded border border-blue/10">
-            AI · mock data
+            Computed from live data
           </span>
         </div>
 

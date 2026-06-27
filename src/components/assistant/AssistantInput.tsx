@@ -75,7 +75,7 @@ export function AssistantInput() {
           Ask the assistant
         </h3>
         <span className="text-2xs text-teal/30 bg-blue-pale px-2 py-0.5 rounded border border-blue/10">
-          Mock AI · OpenClaw ready
+          Rule-based · live data
         </span>
       </div>
 

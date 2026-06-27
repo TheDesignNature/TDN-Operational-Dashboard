@@ -127,9 +127,9 @@ export function Sidebar() {
       {/* Footer */}
       <div className="px-5 py-4 border-t border-white/10">
         <p className="text-2xs text-white/20 leading-relaxed">
-          AI outputs are mock data.
+          Insights are computed live
           <br />
-          Connect OpenClaw to go live.
+          from real campaign data.
         </p>
       </div>
     </aside>
