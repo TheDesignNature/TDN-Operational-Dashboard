@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getSupabaseClient } from "@/lib/supabase";
 import { formatCurrency, formatNumber } from "@/lib/formatters";
 
 interface ClientSummary {
@@ -164,10 +163,29 @@ function ClientGroupSection({ group }: { group: ClientGroup }) {
   );
 }
 
+interface ClosedMonth {
+  month_label: string;
+  spend: number;
+  traffic: number;
+  enquiries: number;
+  cpl: number | null;
+  mom_spend: number | null;
+  mom_traffic: number | null;
+  mom_enquiries: number | null;
+  mom_cpl: number | null;
+}
+
+interface MtdSnapshot {
+  month_label: string;
+  spend_mtd: number;
+  traffic_mtd: number;
+  enquiries_mtd: number;
+}
+
 function buildClient(
   id: string, name: string, slug: string,
-  result: PromiseSettledResult<any>,
-  mtdResult?: PromiseSettledResult<any>
+  closed: ClosedMonth | null,
+  mtd: MtdSnapshot | null
 ): ClientSummary {
   const empty: ClientSummary = {
     id, name, slug,
@@ -177,101 +195,77 @@ function buildClient(
     hasData: false, isLive: false,
   };
 
-  if (result.status === "rejected" || !result.value?.data?.length) return empty;
+  if (!closed) return empty;
 
-  const rows = result.value.data as any[];
-
-  // Latest CLOSED month = last row where metric_date < start of current month
-  const now = new Date();
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const closedRows = rows.filter((r: any) => r.metric_date < currentMonthStart);
-  const openRows = rows.filter((r: any) => r.metric_date >= currentMonthStart);
-
-  const latest = closedRows.length > 0 ? closedRows[closedRows.length - 1] : rows[rows.length - 1];
-  const current = openRows.length > 0 ? openRows[openRows.length - 1] : null;
-
-  const enq = latest.enquiries ?? latest.bookings ?? null;
-
-  const client: ClientSummary = {
+  return {
     id, name, slug,
-    latestMonth: latest.month_label,
-    spend: latest.spend,
-    traffic: latest.traffic,
-    enquiries: enq,
-    cpl: latest.cost_per_lead ?? latest.cost_per_booking ?? null,
-    mom_spend: latest.mom_spend_pct,
-    mom_traffic: latest.mom_traffic_pct,
-    mom_enquiries: latest.mom_enquiries_pct ?? latest.mom_bookings_pct ?? null,
-    mom_cpl: latest.mom_cpl_pct ?? latest.mom_cpb_pct ?? null,
-    currentMonth: current?.month_label ?? null,
-    mtd_spend: current?.spend ?? null,
-    mtd_traffic: current?.traffic ?? null,
-    mtd_enquiries: current?.enquiries ?? current?.bookings ?? null,
+    latestMonth: closed.month_label,
+    spend: closed.spend,
+    traffic: closed.traffic,
+    enquiries: closed.enquiries,
+    cpl: closed.cpl,
+    mom_spend: closed.mom_spend,
+    mom_traffic: closed.mom_traffic,
+    mom_enquiries: closed.mom_enquiries,
+    mom_cpl: closed.mom_cpl,
+    currentMonth: mtd?.month_label ?? null,
+    mtd_spend: mtd?.spend_mtd ?? null,
+    mtd_traffic: mtd?.traffic_mtd ?? null,
+    mtd_enquiries: mtd?.enquiries_mtd ?? null,
     hasData: true,
-    isLive: false,
+    isLive: true,
   };
-
-  // Check MTD view for Powershift
-  if (mtdResult?.status === "fulfilled" && mtdResult.value?.data) {
-    const mtd = mtdResult.value.data;
-    if (mtd.spend_mtd) {
-      client.isLive = true;
-      client.currentMonth = mtd.month_label;
-      client.mtd_spend = mtd.spend_mtd;
-      client.mtd_traffic = mtd.traffic_mtd;
-      client.mtd_enquiries = mtd.enquiries_mtd;
-    }
-  } else if (current) {
-    client.isLive = true;
-  }
-
-  return client;
 }
 
 export default function DashboardPage() {
   const [groups, setGroups] = useState<ClientGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastUpdated] = useState(new Date().toLocaleDateString("en-AU", {
     weekday: "short", day: "numeric", month: "short",
   }));
 
   useEffect(() => {
     async function load() {
-      const supabase = getSupabaseClient();
-      const [ps, psMtd, kkcs, fhm, sh, cc, cm, sac] = await Promise.allSettled([
-        supabase.from("powershift_monthly_report").select("*").order("metric_date"),
-        supabase.from("powershift_mtd").select("*").single(),
-        supabase.from("kkcs_monthly_report").select("*").order("metric_date"),
-        supabase.from("fhm_monthly_report").select("*").order("metric_date"),
-        supabase.from("studyhub_monthly_report").select("*").order("metric_date"),
-        supabase.from("cal_city_monthly_report").select("*").order("metric_date"),
-        supabase.from("cal_mazda_monthly_report").select("*").order("metric_date"),
-        supabase.from("sac_monthly_report").select("*").order("metric_date"),
-      ]);
+      try {
+        const res = await fetch("/api/dashboard/home");
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? `Failed to load dashboard (${res.status})`);
+        }
+        const body = await res.json();
+        const bySlug = new Map<string, { closed: ClosedMonth | null; mtd: MtdSnapshot | null }>(
+          (body.clients ?? []).map((c: any) => [c.slug, { closed: c.closed, mtd: c.mtd }])
+        );
+        const get = (slug: string) => bySlug.get(slug) ?? { closed: null, mtd: null };
 
-      setGroups([
-        {
-          label: null,
-          clients: [buildClient("powershift", "Powershift", "powershift", ps, psMtd)],
-        },
-        {
-          label: "KKCS Group",
-          clients: [
-            buildClient("kkcs", "KKCS", "kkcs", kkcs),
-            buildClient("fhm", "Foundation Home Mods", "foundation-home-mods", fhm),
-            buildClient("studyhub", "Study Hub", "study-hub", sh),
-          ],
-        },
-        {
-          label: "Automotive",
-          clients: [
-            buildClient("calcity", "Caloundra City Auto", "caloundra-city-auto", cc),
-            buildClient("calmazda", "Caloundra Mazda", "caloundra-mazda", cm),
-            buildClient("sac", "Sell a Car", "sell-a-car", sac),
-          ],
-        },
-      ]);
-      setLoading(false);
+        setGroups([
+          {
+            label: null,
+            clients: [buildClient("powershift", "Powershift", "powershift", get("powershift").closed, get("powershift").mtd)],
+          },
+          {
+            label: "KKCS Group",
+            clients: [
+              buildClient("kkcs", "KKCS", "kkcs", get("kkcs").closed, get("kkcs").mtd),
+              buildClient("fhm", "Foundation Home Mods", "foundation-home", get("foundation-home").closed, get("foundation-home").mtd),
+              buildClient("studyhub", "Study Hub", "study-hub", get("study-hub").closed, get("study-hub").mtd),
+            ],
+          },
+          {
+            label: "Automotive",
+            clients: [
+              buildClient("calcity", "Caloundra City Auto", "caloundra-city-auto", get("caloundra-city-auto").closed, get("caloundra-city-auto").mtd),
+              buildClient("calmazda", "Caloundra Mazda", "caloundra-mazda", get("caloundra-mazda").closed, get("caloundra-mazda").mtd),
+              buildClient("sac", "Sell a Car", "sell-a-car", get("sell-a-car").closed, get("sell-a-car").mtd),
+            ],
+          },
+        ]);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load dashboard");
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -280,6 +274,14 @@ export default function DashboardPage() {
     return (
       <div className="max-w-5xl mx-auto pt-12 text-center">
         <p className="text-sm text-teal/40">Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-5xl mx-auto pt-12 text-center">
+        <p className="text-sm text-red-600">Couldn&apos;t load the dashboard: {error}</p>
       </div>
     );
   }
