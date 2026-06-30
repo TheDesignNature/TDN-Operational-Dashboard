@@ -60,7 +60,7 @@ export function DailyBriefing() {
           </span>
         </div>
         <span className="text-2xs text-teal/30">
-          AI-generated · mock data
+          Computed from live data
         </span>
       </div>
 

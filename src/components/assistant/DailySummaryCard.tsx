@@ -36,7 +36,7 @@ export function DailySummaryCard() {
             Daily summary
           </span>
         </div>
-        <span className="text-2xs text-teal/30">Generated at {time} · mock AI</span>
+        <span className="text-2xs text-teal/30">Generated at {time} · computed from live data</span>
       </div>
 
       <div className="p-5">
